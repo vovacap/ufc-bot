@@ -35,10 +35,6 @@ def only_me(func):
     return wrapper
 
 
-def nick_power(nick: str) -> int:
-    return len(nick.lstrip("@"))
-
-
 def get_font(size, bold=False):
     candidates = [
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold
@@ -179,24 +175,20 @@ async def add(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return
 
     nick = args[0]
-    power = nick_power(nick)
-    state["challenger"] = {"nick": nick, "power": power}
+    state["challenger"] = {"nick": nick}
     save_state(state)
 
     if state["champion"]:
         champ = state["champion"]
-        bonus = min(champ["defenses"], 5)
         await update.message.reply_text(
-            f"🥊 Претендент: {nick}\n"
-            f"  СИЛА (длина): {power}\n\n"
+            f"🥊 Претендент: {nick}\n\n"
             f"Чемпион: {champ['nick']}\n"
-            f"  СИЛА: {champ['power']} + бонус {bonus} = {champ['power'] + bonus}\n"
             f"  Защит: {champ['defenses']}\n\n"
             f"Пиши /fight"
         )
     else:
         await update.message.reply_text(
-            f"🥊 {nick} добавлен.\nСИЛА (длина): {power}\n\n"
+            f"🥊 {nick} добавлен.\n\n"
             f"Чемпиона нет — /fight сделает его первым."
         )
 
@@ -219,36 +211,29 @@ async def fight(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         img_path = generate_image(challenger["nick"], "new")
         await update.message.reply_photo(
             photo=open(img_path, "rb"),
-            caption=f"🏆 {challenger['nick']} — первый чемпион!\n"
-                    f"СИЛА: {challenger['power']}"
+            caption=f"🏆 {challenger['nick']} — первый чемпион!"
         )
         return
 
     champ = state["champion"]
-    bonus = min(champ["defenses"], 5)
-    champ_power_total = champ["power"] + bonus
 
     champ_luck = random.randint(0, 10)
     chall_luck = random.randint(0, 10)
-    champ_total = champ_power_total + champ_luck
-    chall_total = challenger["power"] + chall_luck
+    champ_total = champ_luck
+    chall_total = chall_luck
 
     while champ_total == chall_total:
         champ_luck = random.randint(0, 10)
         chall_luck = random.randint(0, 10)
-        champ_total = champ_power_total + champ_luck
-        chall_total = challenger["power"] + chall_luck
+        champ_total = champ_luck
+        chall_total = chall_luck
 
     text = (
         f"🥊 БОЙ!\n\n"
         f"ЧЕМПИОН {champ['nick']}\n"
-        f"  СИЛА: {champ['power']} + бонус {bonus} = {champ_power_total}\n"
-        f"  🎲 Кубик: {champ_luck}\n"
-        f"  ИТОГ: {champ_total}\n\n"
+        f"  🎲 Кубик: {champ_luck}\n\n"
         f"ПРЕТЕНДЕНТ {challenger['nick']}\n"
-        f"  СИЛА: {challenger['power']}\n"
-        f"  🎲 Кубик: {chall_luck}\n"
-        f"  ИТОГ: {chall_total}\n\n"
+        f"  🎲 Кубик: {chall_luck}\n\n"
     )
 
     if chall_total > champ_total:
@@ -288,13 +273,9 @@ async def champion(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Чемпиона пока нет.")
         return
     c = state["champion"]
-    bonus = min(c["defenses"], 5)
     await update.message.reply_text(
         f"🏆 Чемпион: {c['nick']}\n"
-        f"СИЛА: {c['power']}\n"
-        f"Защит: {c['defenses']}\n"
-        f"Бонус: +{bonus}\n"
-        f"Итоговая сила: {c['power'] + bonus}"
+        f"Защит: {c['defenses']}"
     )
 
 
