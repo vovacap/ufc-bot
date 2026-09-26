@@ -7,6 +7,7 @@ import struct
 import subprocess
 import tempfile
 import asyncio
+import urllib.request
 from telegram import Update
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
@@ -25,6 +26,13 @@ BELT_PATH = "belt.png"
 COFFEE_PATH = "coffee.png"
 CAGE_OPEN_PATH = "cage_open.png"
 CAGE_CLOSED_PATH = "cage_closed.png"
+FONT_PATH = "font.ttf"
+
+FONT_URLS = [
+    "https://cdn.jsdelivr.net/gh/google/fonts@main/apache/roboto/static/Roboto-Bold.ttf",
+    "https://raw.githubusercontent.com/google/fonts/main/apache/roboto/static/Roboto-Bold.ttf",
+    "https://github.com/google/fonts/raw/main/apache/roboto/static/Roboto-Bold.ttf",
+]
 
 state = {"history": []}
 game = {
@@ -35,6 +43,21 @@ game = {
     "last_msg_id": None,
     "chat_id": None
 }
+
+
+def ensure_font():
+    if os.path.exists(FONT_PATH):
+        return True
+    for url in FONT_URLS:
+        try:
+            print(f"Downloading font from {url}...")
+            urllib.request.urlretrieve(url, FONT_PATH)
+            if os.path.exists(FONT_PATH) and os.path.getsize(FONT_PATH) > 10000:
+                print("Font downloaded OK")
+                return True
+        except Exception as e:
+            print(f"Failed: {e}")
+    return False
 
 
 def load_state():
@@ -57,18 +80,42 @@ def only_me(func):
     return wrapper
 
 
+_font_cache = {}
+
+
 def get_font(size, bold=False):
-    candidates = [
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold
-        else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-        "C:/Windows/Fonts/arialbd.ttf" if bold else "C:/Windows/Fonts/arial.ttf",
-        "/System/Library/Fonts/Supplemental/Arial Bold.ttf" if bold
-        else "/System/Library/Fonts/Supplemental/Arial.ttf",
-    ]
-    for path in candidates:
-        if os.path.exists(path):
-            return ImageFont.truetype(path, size)
-    return ImageFont.load_default()
+    key = size
+    if key in _font_cache:
+        return _font_cache[key]
+
+    font = None
+    if os.path.exists(FONT_PATH):
+        try:
+            font = ImageFont.truetype(FONT_PATH, size)
+        except Exception:
+            font = None
+
+    if font is None:
+        candidates = [
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        ]
+        for path in candidates:
+            if os.path.exists(path):
+                try:
+                    font = ImageFont.truetype(path, size)
+                    break
+                except Exception:
+                    continue
+
+    if font is None:
+        try:
+            font = ImageFont.load_default(size=size)
+        except TypeError:
+            font = ImageFont.load_default()
+
+    _font_cache[key] = font
+    return font
 
 
 def circular_photo(path, size, border_color=(255, 215, 0), border_width=6):
@@ -109,13 +156,13 @@ def grayscale_circular(path, size, border_color=(70, 70, 70), border_width=4):
     return gray
 
 
-def draw_dice(draw, cx, cy, number, size=150):
+def draw_dice(draw, cx, cy, number, size=160):
     half = size // 2
     draw.rounded_rectangle(
         [cx - half, cy - half, cx + half, cy + half],
         radius=20, fill=(255, 255, 255), outline=(30, 30, 40), width=7
     )
-    font = get_font(int(size * 0.78), bold=True)
+    font = get_font(int(size * 0.85), bold=True)
     text = str(number)
     bbox = draw.textbbox((0, 0), text, font=font)
     tw = bbox[2] - bbox[0]
@@ -228,7 +275,7 @@ def draw_frame2(photos, nicks, dice):
         draw.text((x - tw // 2 + 2, y + 65 + 2), nick, font=font, fill=(0, 0, 0))
         draw.text((x - tw // 2, y + 65), nick, font=font, fill=(255, 255, 255))
 
-        draw_dice(draw, x, y + 195, dice[i], size=150)
+        draw_dice(draw, x, y + 200, dice[i], size=160)
 
     return img
 
@@ -365,9 +412,9 @@ def generate_video(photos, nicks, dice, winner_idx, output_path):
             "-loop", "1", "-t", "5", "-i", p3,
             "-i", sound_path,
             "-filter_complex",
-            "[0:v]scale=720:720,fps=10[a];"
-            "[1:v]scale=720:720,fps=10[b];"
-            "[2:v]scale=720:720,fps=10[c];"
+            "[0:v]scale=1080:1080,fps=10[a];"
+            "[1:v]scale=1080:1080,fps=10[b];"
+            "[2:v]scale=1080:1080,fps=10[c];"
             "[a][b][c]concat=n=3:v=1:a=0[v]",
             "-map", "[v]",
             "-map", "3:a",
@@ -552,7 +599,6 @@ async def cmd_go(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             supports_streaming=True
         )
 
-        # Пауза 7 секунд — чтобы ты успел открыть видео
         await asyncio.sleep(7)
 
         await ctx.bot.send_message(
@@ -616,6 +662,8 @@ async def cmd_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 
 def main():
+    print("Проверяю шрифт...")
+    ensure_font()
     load_state()
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("cell", cmd_cell))
@@ -630,3 +678,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+  
+
+               
+  
