@@ -109,18 +109,18 @@ def grayscale_circular(path, size, border_color=(70, 70, 70), border_width=4):
     return gray
 
 
-def draw_dice(draw, cx, cy, number, size=170):
+def draw_dice(draw, cx, cy, number, size=150):
     half = size // 2
     draw.rounded_rectangle(
         [cx - half, cy - half, cx + half, cy + half],
-        radius=18, fill=(255, 255, 255), outline=(30, 30, 40), width=6
+        radius=20, fill=(255, 255, 255), outline=(30, 30, 40), width=7
     )
-    font = get_font(int(size * 0.72), bold=True)
+    font = get_font(int(size * 0.78), bold=True)
     text = str(number)
     bbox = draw.textbbox((0, 0), text, font=font)
     tw = bbox[2] - bbox[0]
     th = bbox[3] - bbox[1]
-    draw.text((cx - tw // 2, cy - th // 2 - 6), text, font=font, fill=(20, 20, 30))
+    draw.text((cx - tw // 2, cy - th // 2 - 8), text, font=font, fill=(20, 20, 30))
 
 
 def make_bg():
@@ -228,7 +228,7 @@ def draw_frame2(photos, nicks, dice):
         draw.text((x - tw // 2 + 2, y + 65 + 2), nick, font=font, fill=(0, 0, 0))
         draw.text((x - tw // 2, y + 65), nick, font=font, fill=(255, 255, 255))
 
-        draw_dice(draw, x, y + 190, dice[i], size=170)
+        draw_dice(draw, x, y + 195, dice[i], size=150)
 
     return img
 
@@ -244,40 +244,40 @@ def draw_frame3(photos, nicks, winner_idx):
             fill=(c, int(c * 0.7), 0)
         )
 
-    draw_text_center(draw, "ПОБЕДИТЕЛЬ", 40, 76, (255, 215, 0))
+    draw_text_center(draw, "ПОБЕДИТЕЛЬ", 30, 76, (255, 215, 0))
 
-    wx, wy = IMG_W // 2, 420
+    wx, wy = IMG_W // 2, 400
     cp = circular_photo(photos[winner_idx], 280, border_color=(255, 215, 0), border_width=10)
     img.paste(cp, (wx - cp.width // 2, wy - cp.height // 2), cp)
 
-    font_nick = get_font(64, bold=True)
+    font_nick = get_font(56, bold=True)
     nick = nicks[winner_idx]
     bbox = draw.textbbox((0, 0), nick, font=font_nick)
     tw = bbox[2] - bbox[0]
-    draw.text((wx - tw // 2 + 3, wy + 170 + 3), nick, font=font_nick, fill=(0, 0, 0))
-    draw.text((wx - tw // 2, wy + 170), nick, font=font_nick, fill=(255, 215, 0))
+    draw.text((wx - tw // 2 + 3, wy + 155 + 3), nick, font=font_nick, fill=(0, 0, 0))
+    draw.text((wx - tw // 2, wy + 155), nick, font=font_nick, fill=(255, 215, 0))
 
-    belt_y = wy + 280
+    belt_y = wy + 250
     try:
         belt = Image.open(BELT_PATH).convert("RGBA")
-        bw = 500
+        bw = 460
         ratio = bw / belt.width
         bh = int(belt.height * ratio)
         belt = belt.resize((bw, bh))
         img.paste(belt, (wx - bw // 2, belt_y), belt)
     except Exception:
-        draw.rectangle([wx - 250, belt_y, wx + 250, belt_y + 80],
+        draw.rectangle([wx - 230, belt_y, wx + 230, belt_y + 70],
                        fill=(180, 140, 20), outline=(255, 215, 0), width=4)
 
     try:
         coffee = Image.open(COFFEE_PATH).convert("RGBA")
-        cw = 200
+        cw = 190
         ratio = cw / coffee.width
         ch = int(coffee.height * ratio)
         coffee = coffee.resize((cw, ch))
-        img.paste(coffee, (wx + 260, wy - 100), coffee)
+        img.paste(coffee, (wx + 200, wy - 90), coffee)
     except Exception:
-        draw.rectangle([wx + 280, wy - 50, wx + 380, wy + 150],
+        draw.rectangle([wx + 230, wy - 50, wx + 330, wy + 150],
                        fill=(160, 120, 80), outline=(90, 60, 30), width=3)
 
     losers = [i for i in range(5) if i != winner_idx]
@@ -286,8 +286,6 @@ def draw_frame3(photos, nicks, winner_idx):
         x, y = loser_pos[j]
         gp = grayscale_circular(photos[idx], 90)
         img.paste(gp, (x - gp.width // 2, y - gp.height // 2), gp)
-
-    draw_text_center(draw, f"КОФЕЙНЫЙ ЧЕМПИОН: {nick}", IMG_H - 60, 38, (255, 255, 255))
 
     return img
 
@@ -547,11 +545,22 @@ async def cmd_go(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             await status_msg.delete()
         except Exception:
             pass
+
         await ctx.bot.send_video(
             chat_id=chat_id,
             video=open(video_path, "rb"),
-            caption=f"🏆 КОФЕЙНЫЙ ЧЕМПИОН: {winner}",
             supports_streaming=True
+        )
+
+        # Пауза 7 секунд — чтобы ты успел открыть видео
+        await asyncio.sleep(7)
+
+        await ctx.bot.send_message(
+            chat_id=chat_id,
+            text=(
+                f"🏆 ПОБЕДИТЕЛЬ: {winner}\n"
+                f"☕ КОФЕЙНЫЙ ЧЕМПИОН: {winner}"
+            )
         )
     except Exception as e:
         await ctx.bot.send_message(
