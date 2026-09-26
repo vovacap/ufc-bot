@@ -15,7 +15,7 @@ from telegram.ext import (
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 import imageio_ffmpeg
 
-TOKEN = "TOKEN = "8625559038:AAG2kfcvIfm1SLBSZ_O2ovs2UPZdWQFTYy8""
+TOKEN = "8625559038:AAG2kfcvIfm1SLBSZ_O2ovs2UPZdWQFTYy8""
 MY_ID = 709900282
 
 STATE_FILE = "cell_state.json"
