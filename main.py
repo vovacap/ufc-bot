@@ -110,18 +110,18 @@ def grayscale_circular(path, size, border_color=(70, 70, 70), border_width=4):
     return gray
 
 
-def draw_dice(draw, cx, cy, number, size=70):
+def draw_dice(draw, cx, cy, number, size=170):
     half = size // 2
     draw.rounded_rectangle(
         [cx - half, cy - half, cx + half, cy + half],
-        radius=12, fill=(255, 255, 255), outline=(30, 30, 40), width=5
+        radius=18, fill=(255, 255, 255), outline=(30, 30, 40), width=6
     )
-    font = get_font(int(size * 0.55), bold=True)
+    font = get_font(int(size * 0.72), bold=True)
     text = str(number)
     bbox = draw.textbbox((0, 0), text, font=font)
     tw = bbox[2] - bbox[0]
     th = bbox[3] - bbox[1]
-    draw.text((cx - tw // 2, cy - th // 2 - 5), text, font=font, fill=(20, 20, 30))
+    draw.text((cx - tw // 2, cy - th // 2 - 6), text, font=font, fill=(20, 20, 30))
 
 
 def make_bg():
@@ -206,30 +206,34 @@ def draw_frame2(photos, nicks, dice):
     img = make_bg()
     draw = ImageDraw.Draw(img)
 
-    draw_text_center(draw, "ЖЁСТКАЯ ЗАРУБА", 30, 74, (255, 60, 60))
-    draw_text_center(draw, "НАЧАЛАСЬ", 115, 74, (255, 60, 60))
+    draw_text_center(draw, "ЖЁСТКАЯ ЗАРУБА", 20, 74, (255, 60, 60))
+    draw_text_center(draw, "НАЧАЛАСЬ", 105, 74, (255, 60, 60))
 
-    paste_cage(img, CAGE_CLOSED_PATH, IMG_W // 2, 560, 520)
+    paste_cage(img, CAGE_CLOSED_PATH, IMG_W // 2, 560, 480)
 
+    # 5 бойцов: фото + ник + ОГРОМНЫЙ кубик
     positions = [
-        (540, 400), (280, 570), (800, 570),
-        (400, 760), (680, 760)
+        (540, 340), (200, 530), (880, 530),
+        (340, 730), (740, 730)
     ]
 
     for i in range(5):
         x, y = positions[i]
 
-        cp = circular_photo(photos[i], 120)
+        # Фото
+        cp = circular_photo(photos[i], 110)
         img.paste(cp, (x - cp.width // 2, y - cp.height // 2), cp)
 
+        # Ник под фото
         font = get_font(26, bold=True)
         nick = nicks[i]
         bbox = draw.textbbox((0, 0), nick, font=font)
         tw = bbox[2] - bbox[0]
-        draw.text((x - tw // 2 + 2, y + 68 + 2), nick, font=font, fill=(0, 0, 0))
-        draw.text((x - tw // 2, y + 68), nick, font=font, fill=(255, 255, 255))
+        draw.text((x - tw // 2 + 2, y + 65 + 2), nick, font=font, fill=(0, 0, 0))
+        draw.text((x - tw // 2, y + 65), nick, font=font, fill=(255, 255, 255))
 
-        draw_dice(draw, x, y + 145, dice[i], size=105)
+        # ОГРОМНЫЙ кубик под ником
+        draw_dice(draw, x, y + 190, dice[i], size=170)
 
     return img
 
