@@ -2,7 +2,10 @@ import random
 import json
 import os
 from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram.ext import (
+    Application, CommandHandler, MessageHandler,
+    ContextTypes, filters
+)
 from PIL import Image, ImageDraw, ImageFont
 
 TOKEN = "8625559038:AAG2kfcvIfm1SLBSZ_O2ovs2UPZdWQFTYy8"
@@ -95,6 +98,33 @@ def draw_fighter(draw, cx, cy, scale=1.0, color=(200, 200, 200)):
     ], fill=color, width=int(16 * scale))
 
 
+def paste_avatar(img, photo_path, cx, cy, size=380):
+    """Вставляет фото круглым аватаром."""
+    try:
+        avatar = Image.open(photo_path).convert("RGB")
+    except Exception:
+        return False
+    # Кроп до квадрата
+    w, h = avatar.size
+    side = min(w, h)
+    left = (w - side) // 2
+    top = (h - side) // 2
+    avatar = avatar.crop((left, top, left + side, top + side))
+    avatar = avatar.resize((size, size))
+    # Круглая маска
+    mask = Image.new("L", (size, size), 0)
+    ImageDraw.Draw(mask).ellipse((0, 0, size, size), fill=255)
+    # Обводка
+    border = Image.new("RGB", (size + 20, size + 20), (255, 215, 0))
+    border_mask = Image.new("L", (size + 20, size + 20), 0)
+    ImageDraw.Draw(border_mask).ellipse(
+        (0, 0, size + 20, size + 20), fill=255
+    )
+    img.paste(border, (cx - size // 2 - 10, cy - size // 2 - 10), border_mask)
+    img.paste(avatar, (cx - size // 2, cy - size // 2), mask)
+    return True
+
+
 def draw_belt(draw, cx, cy, w=300, h=60):
     draw.rectangle(
         [cx - w // 2, cy - h // 2, cx + w // 2, cy + h // 2],
@@ -120,7 +150,7 @@ def draw_belt(draw, cx, cy, w=300, h=60):
               font=font, fill=(80, 40, 0))
 
 
-def generate_image(nick, status):
+def generate_image(nick, status, photo_path=None):
     img = Image.new("RGB", (IMG_W, IMG_H), (10, 10, 12))
     draw = ImageDraw.Draw(img)
 
@@ -135,10 +165,22 @@ def generate_image(nick, status):
     draw_octagon(draw, IMG_W // 2, IMG_H // 2 + 50, 380,
                  color=(50, 50, 50), width=4)
 
-    draw_fighter(draw, IMG_W // 2, IMG_H // 2 + 50, scale=2.2,
-                 color=(230, 230, 230))
+    # Если есть фото — вставляем его, иначе рисуем силуэт
+    used_photo = False
+    if photo_path and os.path.exists(photo_path):
+        used_photo = paste_avatar(
+            img, photo_path,
+            IMG_W // 2, IMG_H // 2 - 30,
+            size=380
+        )
 
-    draw_belt(draw, IMG_W // 2, IMG_H // 2 + 130)
+    if not used_photo:
+        draw_fighter(draw, IMG_W // 2, IMG_H // 2 + 50, scale=2.2,
+                     color=(230, 230, 230))
+        draw_belt(draw, IMG_W // 2, IMG_H // 2 + 130)
+    else:
+        # Пояс ниже аватарки
+        draw_belt(draw, IMG_W // 2, IMG_H // 2 + 220)
 
     font_big = get_font(90, bold=True)
     text_top = "AND NEW" if status == "new" else "AND STILL"
@@ -175,22 +217,42 @@ async def add(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return
 
     nick = args[0]
-    state["challenger"] = {"nick": nick}
+    state["challenger"] = {"nick": nick, "photo": None}
     save_state(state)
 
-    if state["champion"]:
-        champ = state["champion"]
+    await update.message.reply_text(
+        f"🥊 {nick} добавлен.\n\n"
+        f"📸 Теперь пришли мне фото (аватарку из профиля). "
+        f"Просто отправь картинку в чат."
+    )
+
+
+@only_me
+async def photo_handler(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Ловит фото от тебя и прикрепляет к текущему претенденту."""
+    global state
+
+    if not state.get("challenger"):
         await update.message.reply_text(
-            f"🥊 Претендент: {nick}\n\n"
-            f"Чемпион: {champ['nick']}\n"
-            f"  Защит: {champ['defenses']}\n\n"
-            f"Пиши /fight"
+            "Сначала добавь претендента: /add @nick"
         )
-    else:
-        await update.message.reply_text(
-            f"🥊 {nick} добавлен.\n\n"
-            f"Чемпиона нет — /fight сделает его первым."
-        )
+        return
+
+    nick = state["challenger"]["nick"]
+    safe_nick = nick.lstrip("@").replace("/", "_")
+
+    photo = update.message.photo[-1]
+    file = await photo.get_file()
+    path = f"photo_{safe_nick}.png"
+    await file.download_to_drive(path)
+
+    state["challenger"]["photo"] = path
+    save_state(state)
+
+    await update.message.reply_text(
+        f"✅ Фото сохранено для {nick}.\n\n"
+        f"Пиши /fight"
+    )
 
 
 @only_me
@@ -208,7 +270,10 @@ async def fight(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         state["champion"] = challenger
         state["challenger"] = None
         save_state(state)
-        img_path = generate_image(challenger["nick"], "new")
+        img_path = generate_image(
+            challenger["nick"], "new",
+            challenger.get("photo")
+        )
         await update.message.reply_photo(
             photo=open(img_path, "rb"),
             caption=f"🏆 {challenger['nick']} — первый чемпион!"
@@ -242,25 +307,28 @@ async def fight(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         state["challenger"] = None
         text += f"🏆 AND NEW! {challenger['nick']} — новый чемпион!"
         status = "new"
-        winner_nick = challenger["nick"]
+        winner = state["champion"]
     else:
         champ["defenses"] += 1
         state["champion"] = champ
         state["challenger"] = None
         text += f"🏆 AND STILL! {champ['nick']} защитил пояс!\nЗащит: {champ['defenses']}"
         status = "still"
-        winner_nick = champ["nick"]
+        winner = state["champion"]
 
     state["history"].append({
         "champ": champ["nick"],
         "challenger": challenger["nick"],
         "champ_total": champ_total,
         "chall_total": chall_total,
-        "winner": winner_nick
+        "winner": winner["nick"]
     })
     save_state(state)
 
-    img_path = generate_image(winner_nick, status)
+    img_path = generate_image(
+        winner["nick"], status,
+        winner.get("photo")
+    )
     await update.message.reply_photo(
         photo=open(img_path, "rb"),
         caption=text
@@ -273,9 +341,11 @@ async def champion(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Чемпиона пока нет.")
         return
     c = state["champion"]
+    photo_status = "есть" if c.get("photo") else "нет"
     await update.message.reply_text(
         f"🏆 Чемпион: {c['nick']}\n"
-        f"Защит: {c['defenses']}"
+        f"Защит: {c['defenses']}\n"
+        f"Фото: {photo_status}"
     )
 
 
@@ -286,14 +356,11 @@ async def history(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return
     text = "📜 История:\n\n"
     for i, h in enumerate(state["history"][-10:], 1):
-        if h.get("type") == "first_champion":
-            text += f"{i}. {h['nick']} — первый чемпион\n"
-        else:
-            text += (
-                f"{i}. {h['champ']} ({h['champ_total']}) vs "
-                f"{h['challenger']} ({h['chall_total']}) → "
-                f"🏆 {h['winner']}\n"
-            )
+        text += (
+            f"{i}. {h['champ']} ({h['champ_total']}) vs "
+            f"{h['challenger']} ({h['chall_total']}) → "
+            f"🏆 {h['winner']}\n"
+        )
     await update.message.reply_text(text)
 
 
@@ -312,6 +379,7 @@ def main():
     app.add_handler(CommandHandler("champion", champion))
     app.add_handler(CommandHandler("history", history))
     app.add_handler(CommandHandler("reset", reset))
+    app.add_handler(MessageHandler(filters.PHOTO, photo_handler))
     print("Бот запущен...")
     app.run_polling()
 
