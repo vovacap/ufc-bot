@@ -20,7 +20,6 @@ MY_ID = 709900282
 
 STATE_FILE = "cell_state.json"
 IMG_W, IMG_H = 1080, 1080
-FPS = 10
 
 BELT_PATH = "belt.png"
 COFFEE_PATH = "coffee.png"
@@ -211,7 +210,6 @@ def draw_frame2(photos, nicks, dice):
 
     paste_cage(img, CAGE_CLOSED_PATH, IMG_W // 2, 560, 480)
 
-    # 5 бойцов: фото + ник + ОГРОМНЫЙ кубик
     positions = [
         (540, 340), (200, 530), (880, 530),
         (340, 730), (740, 730)
@@ -220,11 +218,9 @@ def draw_frame2(photos, nicks, dice):
     for i in range(5):
         x, y = positions[i]
 
-        # Фото
         cp = circular_photo(photos[i], 110)
         img.paste(cp, (x - cp.width // 2, y - cp.height // 2), cp)
 
-        # Ник под фото
         font = get_font(26, bold=True)
         nick = nicks[i]
         bbox = draw.textbbox((0, 0), nick, font=font)
@@ -232,7 +228,6 @@ def draw_frame2(photos, nicks, dice):
         draw.text((x - tw // 2 + 2, y + 65 + 2), nick, font=font, fill=(0, 0, 0))
         draw.text((x - tw // 2, y + 65), nick, font=font, fill=(255, 255, 255))
 
-        # ОГРОМНЫЙ кубик под ником
         draw_dice(draw, x, y + 190, dice[i], size=170)
 
     return img
@@ -352,28 +347,14 @@ def generate_video(photos, nicks, dice, winner_idx, output_path):
         f2 = draw_frame2(photos, nicks, dice)
         f3 = draw_frame3(photos, nicks, winner_idx)
 
-        idx = 0
+        p1 = os.path.join(tmp, "f1.png")
+        p2 = os.path.join(tmp, "f2.png")
+        p3 = os.path.join(tmp, "f3.png")
+        f1.save(p1)
+        f2.save(p2)
+        f3.save(p3)
 
-        for _ in range(30):
-            f1.save(os.path.join(tmp, f"f_{idx:04d}.png"))
-            idx += 1
-
-        white = Image.new("RGB", (IMG_W, IMG_H), (255, 255, 255))
-        for _ in range(5):
-            white.save(os.path.join(tmp, f"f_{idx:04d}.png"))
-            idx += 1
-
-        for _ in range(50):
-            f2.save(os.path.join(tmp, f"f_{idx:04d}.png"))
-            idx += 1
-
-        for _ in range(5):
-            white.save(os.path.join(tmp, f"f_{idx:04d}.png"))
-            idx += 1
-
-        for _ in range(50):
-            f3.save(os.path.join(tmp, f"f_{idx:04d}.png"))
-            idx += 1
+        del f1, f2, f3
 
         sound_path = os.path.join(tmp, "sound.wav")
         generate_sound(14.0, sound_path)
@@ -381,10 +362,19 @@ def generate_video(photos, nicks, dice, winner_idx, output_path):
         ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
         subprocess.run([
             ffmpeg_exe, "-y", "-loglevel", "error",
-            "-framerate", str(FPS),
-            "-i", os.path.join(tmp, "f_%04d.png"),
+            "-loop", "1", "-t", "3", "-i", p1,
+            "-loop", "1", "-t", "4", "-i", p2,
+            "-loop", "1", "-t", "5", "-i", p3,
             "-i", sound_path,
+            "-filter_complex",
+            "[0:v]scale=720:720,fps=10[a];"
+            "[1:v]scale=720:720,fps=10[b];"
+            "[2:v]scale=720:720,fps=10[c];"
+            "[a][b][c]concat=n=3:v=1:a=0[v]",
+            "-map", "[v]",
+            "-map", "3:a",
             "-c:v", "libx264",
+            "-preset", "ultrafast",
             "-pix_fmt", "yuv420p",
             "-c:a", "aac",
             "-shortest",
